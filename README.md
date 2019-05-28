@@ -7,6 +7,14 @@ Lightweight CLI tool to check if a host supports HTTP/2 via ALPN.
 ## Usage ##
 `./ish2 <IP> [<port=443>]`
 
+For example:
+```
+$ ./ish2 www.google.com
+Protocol: h2
+$ ./ish2 www.github.com
+Protocol: http/1.1
+```
+
 ## Dependencies ##
 Compiled with OpenSSL 1.0.2n.\
 On Debian-based:\
