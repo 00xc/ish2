@@ -3,12 +3,14 @@
 
 #include <openssl/conf.h>
 #include <openssl/ssl.h>
+#include <openssl/bio.h>
+#include <string.h>
 
 int main(int argc, char *argv[]){
 
-	char *sec, *host, *port, *target; /* Parámetros de IP destino */
+	char *host, *port, *target; /* Target params */
 	SSL_CTX *ctx = NULL;	/* SSL context */
-	BIO *web = NULL, *out = NULL; /* BIOs  */
+	BIO *web = NULL; /* BIO to send data (prob. not necessary) */
 	SSL *ssl = NULL;	/* SSL connection object */
 	long res = 1;	/* Variable para check status */
 	int i = 0;
