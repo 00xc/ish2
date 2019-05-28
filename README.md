@@ -9,5 +9,5 @@ Lightweight CLI tool to check if a host supports HTTP/2 via ALPN.
 
 ## Dependencies ##
 Compiled with OpenSSL 1.0.2n.
-On Debian-based:
-`sudo apt install libssl1.0-dev`
+\On Debian-based:
+\`sudo apt install libssl1.0-dev`
