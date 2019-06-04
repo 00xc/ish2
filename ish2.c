@@ -1,6 +1,4 @@
-
 #include <stdio.h>
-
 #include <openssl/conf.h>
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -33,6 +31,11 @@ int main(int argc, char *argv[]){
 	if(p){
 		host = p+3;
 	}
+	p = strchr(host, '/');
+	if(p){
+		*p = '\x0';
+	}
+
 	target = malloc(strlen(host)+strlen(port)+1);
 	sprintf(target, "%s:%s", host, port);
 
@@ -42,7 +45,7 @@ int main(int argc, char *argv[]){
 	OPENSSL_config(NULL);
 
 	/* Set up SSL method */
-	const SSL_METHOD *method = TLSv1_2_method();
+	const SSL_METHOD *method = SSLv23_client_method();
 	if(method == NULL){
 		printf("Error setting up method\n");
 		exit(1);
@@ -55,12 +58,10 @@ int main(int argc, char *argv[]){
 		exit(1);
 	}
 
-	/* Don't verify peer */
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
-
-	/* Flags */
+	/* Set flags and don't verify peer*/
 	const long flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_COMPRESSION;
 	SSL_CTX_set_options(ctx, flags);
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
 	/* ALPN */
 	unsigned char protos[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
@@ -74,7 +75,7 @@ int main(int argc, char *argv[]){
 	/* Setup BIO web */
 	web = BIO_new_ssl_connect(ctx);
 	if(web == NULL){
-		printf("Error setting up context\n");
+		printf("Error setting up BIO\n");
 		exit(1);
 	}
 	res = BIO_set_conn_hostname(web, target);
@@ -107,7 +108,7 @@ int main(int argc, char *argv[]){
 	/* Connect */
 	res = BIO_do_connect(web);
 	if(res != 1){
-		printf("Error connecting\n");
+		printf("Error connecting. Host does not exist or does not support TLS.\n");
 		exit(1);
 	}
 	res = BIO_do_handshake(web);
