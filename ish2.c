@@ -1,4 +1,6 @@
+
 #include <stdio.h>
+#include <errno.h>
 #include <openssl/conf.h>
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -36,7 +38,11 @@ int main(int argc, char *argv[]){
 		*p = '\x0';
 	}
 
-	target = malloc(strlen(host)+strlen(port)+1);
+	target = malloc(strlen(host)+strlen(port)+2);
+	if(target == NULL){
+		perror("malloc");
+		exit(-1);
+	}
 	sprintf(target, "%s:%s", host, port);
 
 	/* Init SSL library */
@@ -48,6 +54,7 @@ int main(int argc, char *argv[]){
 	const SSL_METHOD *method = SSLv23_client_method();
 	if(method == NULL){
 		printf("Error setting up method\n");
+		free(target);
 		exit(1);
 	}
 
@@ -55,6 +62,7 @@ int main(int argc, char *argv[]){
 	ctx = SSL_CTX_new(method);
 	if(ctx == NULL){
 		printf("Error setting up context\n");
+		free(target);
 		exit(1);
 	}
 
@@ -69,6 +77,7 @@ int main(int argc, char *argv[]){
 	res = SSL_CTX_set_alpn_protos(ctx, protos, protos_len);
 	if(res != 0){
 		printf("Error setting ALPN protocols\n");
+		free(target);
 		exit(1);
 	}
 
@@ -76,16 +85,19 @@ int main(int argc, char *argv[]){
 	web = BIO_new_ssl_connect(ctx);
 	if(web == NULL){
 		printf("Error setting up BIO\n");
+		free(target);
 		exit(1);
 	}
 	res = BIO_set_conn_hostname(web, target);
 	if(res != 1){
 		printf("Error setting hostname");
+		free(target);
 		exit(1);
 	}
 	BIO_get_ssl(web, &ssl);
 	if(ssl == NULL){
 		printf("Error setting up SSL object.\n");
+		free(target);
 		exit(1);
 	}
 
@@ -95,6 +107,7 @@ int main(int argc, char *argv[]){
 	res = SSL_set_cipher_list(ssl, ciphers);
 	if(res != 1){
 		printf("Error setting up cipher suites\n");
+		free(target);
 		exit(1);
 	}
 
@@ -102,6 +115,7 @@ int main(int argc, char *argv[]){
 	res = SSL_set_tlsext_host_name(ssl, host);
 	if(res != 1){
 		printf("Error setting up hostname");
+		free(target);
 		exit(1);
 	}
 
@@ -109,11 +123,13 @@ int main(int argc, char *argv[]){
 	res = BIO_do_connect(web);
 	if(res != 1){
 		printf("Error connecting. Host does not exist or does not support TLS.\n");
+		free(target);
 		exit(1);
 	}
 	res = BIO_do_handshake(web);
 	if(res != 1){
 		printf("Error performing handshake");
+		free(target);
 		exit(1);
 	}
 
@@ -134,5 +150,4 @@ int main(int argc, char *argv[]){
 	if(ctx != NULL){
 		SSL_CTX_free(ctx);
 	}
-	free(target);
 }
