@@ -150,4 +150,5 @@ int main(int argc, char *argv[]){
 	if(ctx != NULL){
 		SSL_CTX_free(ctx);
 	}
+	free(target);
 }
