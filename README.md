@@ -1,5 +1,5 @@
 # ish2
-Lightweight CLI tool to check if a host supports HTTP/2 via ALPN.
+Fast, lightweight CLI tool to check if a host supports HTTP/2 via ALPN.
 
 ## Dependencies ##
 Compiled with OpenSSL 1.0.2n.\
