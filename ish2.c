@@ -6,17 +6,21 @@
 #include <openssl/bio.h>
 #include <string.h>
 
+void exit_program(char *target, int status, char *msg){
+	printf("%s\n", msg);
+	free(target);
+	exit(status);
+}
+
 int main(int argc, char *argv[]){
 
-	char *host, *port, *target; /* Target params */
-	SSL_CTX *ctx = NULL;	/* SSL context */
-	BIO *web = NULL; /* BIO to send data (prob. not necessary) */
-	SSL *ssl = NULL;	/* SSL connection object */
-	long res = 1;	/* Variable para check status */
-	int i = 0;
+	char *host, *port, *target;		/* Target params */
+	SSL_CTX *ctx = NULL;			/* SSL context */
+	SSL *ssl = NULL;				/* SSL connection struct */
+	BIO *web = NULL;				/* BIO to do handshake with */
 
 	/* Read inputs */
-	if(argc > 1){
+	if (argc > 1){
 		host = argv[1];
 		if (argc > 2){
 			port = argv[2];
@@ -28,22 +32,33 @@ int main(int argc, char *argv[]){
 		exit(0);
 	}
 
-	/* Parse inputs */
+	/* Remove protocol scheme */
+	char parsed_host[strlen(host)];
 	char *p = strstr(host, "://");
 	if(p){
-		host = p+3;
+		p[0] = ' ';
+		p[2] = ' ';
+		sscanf(host, "%*s %*s %s", parsed_host);
+	} else {
+		strcpy(parsed_host, host);
 	}
-	p = strchr(host, '/');
-	if(p){
+
+	/* Remove web path and port */
+	p = strchr(parsed_host, '/');
+	if (p){
+		*p = '\x0';
+	}
+	p = strchr(parsed_host, ':');
+	if (p){
 		*p = '\x0';
 	}
 
-	target = malloc(strlen(host)+strlen(port)+2);
-	if(target == NULL){
+	/* Allocate target string */
+	if ( (target = malloc(strlen(parsed_host)+strlen(port)+2)) == NULL ){
 		perror("malloc");
 		exit(-1);
 	}
-	sprintf(target, "%s:%s", host, port);
+	sprintf(target, "%s:%s", parsed_host, port);
 
 	/* Init SSL library */
 	(void) SSL_library_init();
@@ -53,84 +68,47 @@ int main(int argc, char *argv[]){
 	/* Set up SSL method */
 	const SSL_METHOD *method = SSLv23_client_method();
 	if(method == NULL){
-		printf("Error setting up method\n");
-		free(target);
-		exit(1);
+		exit_program(target, 1, "Error setting up method");
 	}
 
 	/* Set up SSL context */
-	ctx = SSL_CTX_new(method);
-	if(ctx == NULL){
-		printf("Error setting up context\n");
-		free(target);
-		exit(1);
+	if( (ctx = SSL_CTX_new(method)) == NULL){
+		exit_program(target, 1, "Error setting up context");
 	}
 
-	/* Set flags and don't verify peer*/
-	const long flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_COMPRESSION;
-	SSL_CTX_set_options(ctx, flags);
+	/* Don't verify peer*/
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
-	/* ALPN */
+	/* Set ALPN */
 	unsigned char protos[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
-	unsigned int protos_len = sizeof(protos);
-	res = SSL_CTX_set_alpn_protos(ctx, protos, protos_len);
-	if(res != 0){
-		printf("Error setting ALPN protocols\n");
-		free(target);
-		exit(1);
+	if( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0){
+		exit_program(target, 1, "Error setting ALPN protocols");
 	}
 
 	/* Setup BIO web */
 	web = BIO_new_ssl_connect(ctx);
 	if(web == NULL){
-		printf("Error setting up BIO\n");
-		free(target);
-		exit(1);
+		exit_program(target, 1, "Error setting up BIO");
 	}
-	res = BIO_set_conn_hostname(web, target);
-	if(res != 1){
-		printf("Error setting hostname");
-		free(target);
-		exit(1);
+	if( (BIO_set_conn_hostname(web, target)) != 1){
+		exit_program(target, 1, "Error setting hostname");
 	}
 	BIO_get_ssl(web, &ssl);
 	if(ssl == NULL){
-		printf("Error setting up SSL object.\n");
-		free(target);
-		exit(1);
-	}
-
-	/* Cipher suites */
-	//const char* const ciphers = "HIGH:ECDHE";
-	const char* const ciphers = "EECDH+CHACHA20:EECDH+AES128:RSA+AES128:EECDH+AES256:RSA+AES256:EECDH+3DES:RSA+3DES:!MD5;";
-	res = SSL_set_cipher_list(ssl, ciphers);
-	if(res != 1){
-		printf("Error setting up cipher suites\n");
-		free(target);
-		exit(1);
+		exit_program(target, 1, "Error setting up SSL object.");
 	}
 
 	/* Set hostname */
-	res = SSL_set_tlsext_host_name(ssl, host);
-	if(res != 1){
-		printf("Error setting up hostname");
-		free(target);
-		exit(1);
+	if( (SSL_set_tlsext_host_name(ssl, host)) != 1){
+		exit_program(target, 1, "Error setting up hostname");
 	}
 
 	/* Connect */
-	res = BIO_do_connect(web);
-	if(res != 1){
-		printf("Error connecting. Host does not exist or does not support TLS.\n");
-		free(target);
-		exit(1);
+	if( (BIO_do_connect(web)) != 1){
+		exit_program(target, 1, "Error connecting. Host does not exist or does not support TLS.");
 	}
-	res = BIO_do_handshake(web);
-	if(res != 1){
-		printf("Error performing handshake");
-		free(target);
-		exit(1);
+	if( (BIO_do_handshake(web)) != 1){
+		exit_program(target, 1, "Error performing handshake");
 	}
 
 	/* Read ALPN */
