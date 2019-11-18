@@ -7,7 +7,10 @@
 #include <string.h>
 
 void exit_program(char *target, int status, char *msg){
-	printf("%s\n", msg);
+
+	char* prhost = strtok(target, ":");
+
+	printf("%s %s\n", prhost, msg);
 	free(target);
 	exit(status);
 }
@@ -68,12 +71,12 @@ int main(int argc, char *argv[]){
 	/* Set up SSL method */
 	const SSL_METHOD *method = SSLv23_client_method();
 	if(method == NULL){
-		exit_program(target, 1, "Error setting up method");
+		exit_program(target, 1, "Error: TLS method");
 	}
 
 	/* Set up SSL context */
 	if( (ctx = SSL_CTX_new(method)) == NULL){
-		exit_program(target, 1, "Error setting up context");
+		exit_program(target, 1, "Error: TLS context");
 	}
 
 	/* Don't verify peer*/
@@ -82,37 +85,39 @@ int main(int argc, char *argv[]){
 	/* Set ALPN */
 	unsigned char protos[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
 	if( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0){
-		exit_program(target, 1, "Error setting ALPN protocols");
+		exit_program(target, 1, "Error: cannot set ALPN");
 	}
 
 	/* Setup BIO web */
 	web = BIO_new_ssl_connect(ctx);
 	if(web == NULL){
-		exit_program(target, 1, "Error setting up BIO");
+		exit_program(target, 1, "Error: cannot set BIO");
 	}
 	if( (BIO_set_conn_hostname(web, target)) != 1){
-		exit_program(target, 1, "Error setting hostname");
+		exit_program(target, 1, "Error: BIO_set_conn_hostname()");
 	}
 	BIO_get_ssl(web, &ssl);
 	if(ssl == NULL){
-		exit_program(target, 1, "Error setting up SSL object.");
+		exit_program(target, 1, "Error: cannot set TLS struct");
 	}
 
 	/* Set hostname */
 	if( (SSL_set_tlsext_host_name(ssl, host)) != 1){
-		exit_program(target, 1, "Error setting up hostname");
+		exit_program(target, 1, "Error: SSL_set_tlsext_host_name()");
 	}
 
 	/* Connect */
 	if( (BIO_do_connect(web)) != 1){
-		exit_program(target, 1, "Error connecting. Host does not exist or does not support TLS.");
+		exit_program(target, 1, "Error: cannot connect/host does not support TLS");
 	}
 	if( (BIO_do_handshake(web)) != 1){
-		exit_program(target, 1, "Error performing handshake");
+		exit_program(target, 1, "Error: BIO_do_handshake()");
 	}
 
+	char* prhost = strtok(target, ":");
+	printf("%s ", prhost);
+
 	/* Read ALPN */
-	printf("Protocol: ");
 	char *alpn_proto = ssl->s3->alpn_selected;
 	unsigned int alpn_length = (unsigned int) ssl->s3->alpn_selected_len;
 	if(alpn_proto != NULL){
