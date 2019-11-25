@@ -15,7 +15,7 @@ On Debian-based:\
 For example:
 ```
 $ ./ish2 www.google.com
-Protocol: h2
+www.google.com h2
 $ ./ish2 www.github.com
-Protocol: http/1.1
+www.github.com http/1.1
 ```
