@@ -2,12 +2,13 @@
 Fast, lightweight CLI tool to check if a host supports HTTP/2 via ALPN.
 
 ## Dependencies ##
-Compiled with OpenSSL 1.0.2n.\
+Compiled with OpenSSL 1.1.1d.\
 On Debian-based:\
-`sudo apt install libssl1.0-dev`
+`sudo apt install libssl-dev`
 
 ## Compiling ##
-`gcc ish2.c -o ish2 -lssl -lcrypto`
+Use the make script:\
+`$ ./make.sh`
 
 ## Usage ##
 `./ish2 <IP> [<port=443>]`
