@@ -10,8 +10,6 @@
 #include <openssl/conf.h>
 #include <openssl/ssl.h>
 
-#include <openssl/opensslv.h>
-
 void exit_program(char* target, int status, char* msg, SSL_CTX* ctx, BIO* bio) {
 
 	char* prhost = strtok(target, ":");
@@ -33,8 +31,6 @@ int main(int argc, char *argv[]) {
 
 	const unsigned char* alpn_proto;	/* Pointer to buffer with ALPN information */
 	unsigned int alpn_length;		/* Length of ALPN buffer */
-
-	printf("%s\n", OPENSSL_VERSION_TEXT );
 
 	/* Read inputs */
 	if (argc > 1) {
