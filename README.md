@@ -10,7 +10,8 @@ On Debian-based:\
 Use `make`. Alternatively, if you do not want to verify the target's certificate (for example if it uses self-signed certificates), compile with `make noverify`.
 
 ## Usage ##
-`./ish2 host [port]`. By default, port 443 is used.
+`./ish2 host [port]`.\
+By default, port 443 is used.
 
 For example:
 ```
@@ -20,8 +21,7 @@ $ ./ish2 www.github.com 443
 www.github.com http/1.1
 ```
 
-NOTE: this tool hangs when the server does not support HTTPS. The quickest workaround is to use the tool [timeout(1)](https://man7.org/linux/man-pages/man1/timeout.1.html):
+NOTE: this tool hangs when the server does not support HTTPS. The quickest workaround is to use [timeout(1)](https://man7.org/linux/man-pages/man1/timeout.1.html):
 ```
 $ timeout 3 ./ish2 deaddomain.com
-$
 ```
