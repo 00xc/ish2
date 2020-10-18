@@ -1,122 +1,137 @@
 /*
- * ish2.c: a HTTP/2 support check tool via ALPN.
+ * ish2.c: an HTTP/2 support check tool via ALPN.
  */
 
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <openssl/bio.h>
 #include <openssl/conf.h>
+#include <openssl/err.h>
 #include <openssl/ssl.h>
 
-void exit_program(char* target, int status, char* msg, SSL_CTX* ctx, BIO* bio) {
+#define TARGET_SIZE	1024
 
-	char* prhost = strtok(target, ":");
-	printf("%s %s\n", prhost, msg);
+void exit_program(const char* target, const char* msg, int status, SSL_CTX* ctx, BIO* bio) {
 
-	SSL_CTX_free(ctx);
+	fprintf(stderr, "%s Error: %s\n", target, msg);
+
 	BIO_free_all(bio);
-	free(target);
+	SSL_CTX_free(ctx);
 	exit(status);
 }
 
+/* This function assumes `target` to have a size of `TARGET_SIZE` */
+int parse_args(char target[], const char* host, const char* port) {
+	char* aux;
+
+	/* Remove protocol scheme if present */
+	if ( (aux = strstr(host, "://")) != NULL ) {
+		aux[2] = ' ';
+		sscanf(host, "%*s %s", target);
+	} else {
+		strncpy(target, host, TARGET_SIZE);
+	}
+
+	target[TARGET_SIZE-1] = '\x0';
+
+	/* Remove web path and port if present */
+	if ( (aux = strchr(target, '/')) != NULL ) {
+		*aux = '\x0';
+	}
+	if ( (aux = strchr(target, ':')) != NULL ) {
+		*aux = '\x0';
+	}
+
+	/* Check for overflow and write final target string */
+	if ( (strlen(target) + strlen(port) + 2) > TARGET_SIZE ) {
+		return -1;
+	}
+	strcat(target, ":");
+	strcat(target, port);
+
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
+	char *port;
+	char target[TARGET_SIZE], hostname[TARGET_SIZE];
 
-	char *host, *port, *target;		/* Target params */
-	SSL_CTX *ctx = NULL;			/* SSL context */
-	SSL *ssl = NULL;			/* SSL connection struct */
-	BIO *web = NULL;			/* BIO to do handshake with */
-	const SSL_METHOD* method;		/* TLS method */
+	const unsigned char* alpn_proto;
+	unsigned int alpn_length;
 
-	const unsigned char* alpn_proto;	/* Pointer to buffer with ALPN information */
-	unsigned int alpn_length;		/* Length of ALPN buffer */
+	const SSL_METHOD* method;
+	SSL_CTX* ctx = NULL;
+	BIO* bio = NULL;
+	SSL* ssl = NULL;
 
-	/* Read inputs */
-	if (argc > 1) {
-		host = argv[1];
-		if (argc > 2)
-			port = argv[2];
-		else
-			port = "443";
+	if (argc == 2) {
+		port = "443";
+	} else if (argc > 2) {
+		port = argv[2];
 	} else {
-		printf("Usage: %s <IP> [<port=443>]\n", argv[0]);
-		exit(0);
+		fprintf(stderr, "Usage: %s host [port]\n", argv[0]);
+		exit(EXIT_SUCCESS);
 	}
 
-	/* Remove protocol scheme */
-	char parsed_host[strlen(host)];
-	char *p = strstr(host, "://");
-	if (p) {
-		p[0] = ' ';
-		p[2] = ' ';
-		sscanf(host, "%*s %*s %s", parsed_host);
-	} else {
-		strcpy(parsed_host, host);
+	if (parse_args(target, argv[1], port) < 0) {
+		exit_program(hostname, "Input target too long", EXIT_FAILURE, NULL, NULL);
 	}
 
-	/* Remove web path and port */
-	p = strchr(parsed_host, '/');
-	if (p) {
-		*p = '\x0';
+	/* Copy target without port into hostname */
+	strncpy(hostname, target, TARGET_SIZE);
+	{
+		char* aux = strchr(hostname, ':');
+		*aux = '\x0';
 	}
-	p = strchr(parsed_host, ':');
-	if (p) {
-		*p = '\x0';
-	}
-
-	/* Allocate target string */
-	if ( (target = malloc(strlen(parsed_host)+strlen(port)+2)) == NULL ) {
-		perror("malloc");
-		exit(-1);
-	}
-	sprintf(target, "%s:%s", parsed_host, port);
 
 	/* Init SSL library */
 	SSL_library_init();
 	SSL_load_error_strings();
 
-	/* Set up SSL method */
-	if ( (method = SSLv23_client_method()) == NULL )
-		exit_program(target, 1, "Error: TLS method", NULL, NULL);
+	/* Set up SSL method and context */
+	if ( (method = SSLv23_client_method()) == NULL ) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, NULL, NULL);
+	}
+	if ( (ctx = SSL_CTX_new(method)) == NULL) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, NULL, NULL);
+	}
 
-	/* Set up SSL context */
-	if ( (ctx = SSL_CTX_new(method)) == NULL)
-		exit_program(target, 1, "Error: TLS context", NULL, NULL);
-
-	/* Don't verify peer*/
+	/* Do not verify certificates */
+	#ifdef NVERIFY
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+	#endif
 
 	/* Set ALPN */
 	unsigned char protos[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
-	if ( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0)
-		exit_program(target, 1, "Error: cannot set ALPN", ctx, NULL);
+	if ( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, NULL);
+	}
 
-	/* Setup BIO web */
-	if ( (web = BIO_new_ssl_connect(ctx)) == NULL)
-		exit_program(target, 1, "Error: cannot set BIO", ctx, NULL);
+	/* Set up BIO and retrieve pointer into `ssl` */
+	if ( (bio = BIO_new_ssl_connect(ctx)) == NULL) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, NULL);
+	}
+	if ( (BIO_set_conn_hostname(bio, target)) != 1 ) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
+	}
+	if (BIO_get_ssl(bio, &ssl) <= 0) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
+	}
 
-	if ( (BIO_set_conn_hostname(web, target)) != 1 )
-		exit_program(target, 1, "Error: BIO_set_conn_hostname()", ctx, web);
-
-	BIO_get_ssl(web, &ssl);
-	if (ssl == NULL)
-		exit_program(target, 1, "Error: cannot set TLS struct", ctx, web);
-
-	/* Set hostname */
-	if ( (SSL_set_tlsext_host_name(ssl, host)) != 1)
-		exit_program(target, 1, "Error: SSL_set_tlsext_host_name()", ctx, web);
+	/* Set SNI */
+	if ( (SSL_set_tlsext_host_name(ssl, hostname)) != 1) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
+	}
 
 	/* Connect */
-	if ( (BIO_do_connect(web)) != 1)
-		exit_program(target, 1, "Error: cannot connect/host does not support TLS", ctx, web);
-	if ( (BIO_do_handshake(web)) != 1)
-		exit_program(target, 1, "Error: BIO_do_handshake()", ctx, web);
+	if ( BIO_do_connect(bio) != 1 || BIO_do_handshake(bio) != 1 ) {
+		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
+	}
 
-	char* prhost = strtok(target, ":");
-	printf("%s ", prhost);
-
-	/* Get ALPN and print */
+	/* Print result */
+	printf("%s ", hostname);
 	SSL_get0_alpn_selected(ssl, &alpn_proto, &alpn_length);
 	if (alpn_proto != NULL) {
 		printf("%.*s\n", alpn_length, alpn_proto);
@@ -125,9 +140,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Free variables */
-	BIO_free_all(web);
+	BIO_free_all(bio);
 	SSL_CTX_free(ctx);
-	free(target);
 
-	return(0);
+	return 0;
 }
