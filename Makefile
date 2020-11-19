@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O3 -Wall -Wextra -Wpedantic -Werror -fPIE -D_FORTIFY_SOURCE=2
+CFLAGS=-std=c89 -O3 -Wall -Wextra -Wpedantic -Werror -fPIE -D_FORTIFY_SOURCE=2
 LDFLAGS=-lcrypto -lssl
 
 ish2: ish2.c

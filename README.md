@@ -7,7 +7,7 @@ On Debian-based:\
 `sudo apt install libssl-dev`
 
 ## Compiling ##
-Use `make`. Alternatively, if you do not want to verify the target's certificate (for example if it uses self-signed certificates), compile with `make noverify`.
+Use `make`. To skip certificate verification, compile with `make noverify`.
 
 ## Usage ##
 `./ish2 host [port]`.\

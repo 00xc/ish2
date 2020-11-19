@@ -2,17 +2,17 @@
  * ish2.c: an HTTP/2 support check tool via ALPN.
  */
 
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include <openssl/conf.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
 #define TARGET_SIZE	1024
 
+#ifdef __GNUC__
+__attribute__ ((noreturn))
+#endif
 void exit_program(const char* target, const char* msg, int status, SSL_CTX* ctx, BIO* bio) {
 
 	fprintf(stderr, "%s Error: %s\n", target, msg);
@@ -86,10 +86,6 @@ int main(int argc, char *argv[]) {
 		*aux = '\x0';
 	}
 
-	/* Init SSL library */
-	SSL_library_init();
-	SSL_load_error_strings();
-
 	/* Set up SSL method and context */
 	if ( (method = SSLv23_client_method()) == NULL ) {
 		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, NULL, NULL);
@@ -104,23 +100,25 @@ int main(int argc, char *argv[]) {
 	#endif
 
 	/* Set ALPN */
-	unsigned char protos[] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
-	if ( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0) {
-		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, NULL);
+	{
+		unsigned char protos[12] = {2, 'h', '2', 8, 'h', 't', 't', 'p', '/', '1', '.', '1'};
+		if ( (SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos))) != 0) {
+			exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, NULL);
+		}
 	}
 
-	/* Set up BIO and retrieve pointer into `ssl` */
+	/* Set up BIO */
 	if ( (bio = BIO_new_ssl_connect(ctx)) == NULL) {
 		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, NULL);
 	}
 	if ( (BIO_set_conn_hostname(bio, target)) != 1 ) {
 		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
 	}
+
+	/* Set SNI */
 	if (BIO_get_ssl(bio, &ssl) <= 0) {
 		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
 	}
-
-	/* Set SNI */
 	if ( (SSL_set_tlsext_host_name(ssl, hostname)) != 1) {
 		exit_program(hostname, ERR_error_string(ERR_get_error(), NULL), EXIT_FAILURE, ctx, bio);
 	}
@@ -139,9 +137,8 @@ int main(int argc, char *argv[]) {
 		printf("http/1.1\n");
 	}
 
-	/* Free variables */
-	BIO_free_all(bio);
 	SSL_CTX_free(ctx);
+	BIO_free_all(bio);
 
 	return 0;
 }
